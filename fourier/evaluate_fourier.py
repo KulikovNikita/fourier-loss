@@ -40,3 +40,33 @@ def evaluate_fourier(x: FPTensor, inp: SinCos,
     if out is None:
         out = torch.zeros_like(x)
     return _evaluate_fourier_out(x, inp, out, factor)
+
+def _evaluate_fourier(x: FPTensor, sin: FPTensor, 
+                      cos: FPTensor, factor: float) -> FPTensor:
+    sincos: SinCos = SinCos(sin, cos)
+    return evaluate_fourier(x = x, inp = sincos, factor = factor)
+
+def evaluate_fourier_batched(x: FPTensor, inp: SinCos,
+                             batch_size: int = 16_384,
+                             factor: float = DEFAULT_FACTOR) -> FPTensor:
+    length: int = x.size(0)
+    batch_count: int = length // batch_size
+    batch_count += bool(length % batch_size)
+
+    # Shortcut
+    if batch_count == 1:
+        return evaluate_fourier(x = x, inp = inp, 
+                                factor = factor,) 
+
+    futures: typing.List[torch.futures.Future[FPTensor]] = []
+    for batch in range(batch_count):
+        first: int = batch * batch_size
+        last: int = min(first + batch_size, length)
+        x_slice: FPTensor = x[first : last, ...]
+        future: torch.futures.Future[FPTensor] = torch.jit.fork(
+            func = _evaluate_fourier, sin = inp.sin, cos = inp.cos, 
+            x = x_slice, factor = factor,
+        )
+        futures.append(future)
+    results: typing.List[FPTensor] = torch.futures.wait_all(futures)
+    return torch.hstack(results)

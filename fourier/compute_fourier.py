@@ -51,4 +51,33 @@ def compute_fourier(x: FPTensor,
     assert n_harmonics == out.n_harmonics
     return _compute_fourier_out(x, out, factor)
 
+def _compute_fourier(x: FPTensor, n_harmonics: int, factor: float) -> typing.Tuple[FPTensor, FPTensor]:
+    result: SinCos = compute_fourier(x = x, n_harmonics = n_harmonics, factor = factor)
+    return (result.sin, result.cos)
 
+def compute_fourier_batched(x: FPTensor, 
+                            n_harmonics: int, 
+                            batch_size: int = 16_384,
+                            factor: float = DEFAULT_FACTOR) -> SinCos:
+    length: int = x.size(0)
+    batch_count: int = length // batch_size
+    batch_count += bool(length % batch_size)
+
+    # Shortcut
+    if batch_count == 1:
+        return compute_fourier(x = x, factor = factor,
+                               n_harmonics = n_harmonics,) 
+
+    futures: typing.List[torch.futures.Future[typing.Tuple[FPTensor, FPTensor]]] = []
+    for batch in range(batch_count):
+        first: int = batch * batch_size
+        last: int = min(first + batch_size, length)
+        x_slice: FPTensor = x[first : last, ...]
+        future: torch.futures.Future[typing.Tuple[FPTensor, FPTensor]] = torch.jit.fork(
+            func = _compute_fourier, n_harmonics = n_harmonics, 
+            x = x_slice, factor = factor,
+        )
+        futures.append(future)
+    results: typing.List[typing.Tuple[FPTensor, FPTensor]] = torch.futures.wait_all(futures)
+    results: typing.List[SinCos] = [SinCos(s, c) for s, c in results]
+    return sum(results)
