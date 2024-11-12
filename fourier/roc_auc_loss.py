@@ -7,29 +7,29 @@ from .fourier import normalize_by_samples, SinCos
 from .compute_fourier import compute_fourier_batched
 from .evaluate_fourier import evaluate_fourier_batched
 
-@torch.compile
+#@torch.compile
 def extract_scores(scores: FPTensor, targets: torch.BoolTensor) -> FPTensor:
     indices: torch.LongTensor = torch.nonzero(targets)[:, 0]
     result: FPTensor = scores.squeeze(-1)[indices]
     return result
 
-@torch.compile
+#@torch.compile
 def split_scores(scores: FPTensor, target: torch.BoolTensor) -> typing.Tuple[FPTensor, FPTensor]:
     pos_scores: FPTensor = extract_scores(scores, target)
     neg_scores: FPTensor = extract_scores(scores, ~target)
     return (neg_scores, pos_scores)
 
-@torch.compile
+#@torch.compile
 def integrate_curve_raw(xs: FPTensor, ys: FPTensor) -> FPTensor:
     return torch.sum(ys[:-1] * torch.diff(xs))
 
-@torch.compile
+#@torch.compile
 def integrate_roc_auc(fpr: FPTensor, tpr: FPTensor) -> FPTensor:
     fpr_first: FPTensor = integrate_curve_raw(fpr, tpr)
     tpr_first: FPTensor = integrate_curve_raw(tpr, fpr)
     return 0.5 * (1.0 + fpr_first - tpr_first)
 
-@torch.compile
+#@torch.compile
 class ColumnRocAuc(torch.nn.Module):
     def __init__(self, n_harmonics: int = 128, 
                  n_points: int = 32_768, batch_size: int = 16_384,) -> None:
@@ -75,7 +75,7 @@ class ColumnRocAuc(torch.nn.Module):
         fpr, tpr, _ = self.curve(scores_flat, target_flat)
         return integrate_roc_auc(fpr, tpr)
     
-@torch.compile
+#@torch.compile
 class RocAuc(torch.nn.Module):
     def __init__(self, statistic: str = "mean", n_harmonics: int = 128, 
                  n_points: int = 32_768, batch_size: int = 16_384,) -> None:
